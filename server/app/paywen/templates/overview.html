@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% from "_macros.html" import findings_table, count_pill, status_badge, trend_card, donut_panel, packages_chart %}
+{% block title %}Resumen · Paywen Scan{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Postura de riesgo</h1>
+    <p class="muted meta-line">
+      {{ icon('clock', 14) }} Última ingesta {{ kpi.last_ingest|ago }} · Última pasada del worker {{ kpi.last_worker|ago }}
+      {% if kpi.kev_size %}· Catálogo KEV: {{ kpi.kev_size|int|n }} CVEs{% endif %}
+    </p>
+  </div>
+  <a class="button-link" href="/findings.csv">{{ icon('download', 16) }}Exportar CSV</a>
+</div>
+
+<section class="kpis" aria-label="Indicadores">
+  <a class="kpi" href="/hosts">
+    <span class="kpi-icon">{{ icon('server', 20) }}</span>
+    <span class="kpi-label">Hosts monitoreados</span>
+    <span class="kpi-value">{{ kpi.hosts|n }}</span>
+    <span class="kpi-sub status-line">
+      <span class="dot-status dot-online"></span>{{ status.online }} en línea
+      <span class="dot-status dot-late"></span>{{ status.late }} atrasado{{ "s" if status.late != 1 else "" }}
+      <span class="dot-status dot-offline"></span>{{ status.offline }} sin reportar
+    </span>
+  </a>
+  <a class="kpi" href="/findings">
+    <span class="kpi-icon">{{ icon('bug', 20) }}</span>
+    <span class="kpi-label">Vulnerabilidades únicas</span>
+    <span class="kpi-value">{{ kpi.unique_vulns|n }}</span>
+    <span class="kpi-sub">{{ kpi.unique_fixable|n }} con parche disponible</span>
+  </a>
+  <a class="kpi kpi-alert" href="/findings?kev=1">
+    <span class="kpi-icon">{{ icon('shield-exclamation-point', 20) }}</span>
+    <span class="kpi-label">En CISA KEV (explotadas)</span>
+    <span class="kpi-value">{{ kpi.kev_vulns|n }}</span>
+    <span class="kpi-sub">Afectan a {{ kpi.kev_hosts }} host{{ "s" if kpi.kev_hosts != 1 else "" }} · {{ icon('skull', 13) }} {{ kpi.ransomware_vulns }} con ransomware</span>
+  </a>
+  <a class="kpi" href="/campaigns">
+    <span class="kpi-icon">{{ icon('radar', 20) }}</span>
+    <span class="kpi-label">Campañas relacionadas</span>
+    <span class="kpi-value">{{ kpi.campaigns|n }}</span>
+    <span class="kpi-sub">Pulses de OTX sobre tus CVEs</span>
+  </a>
+</section>
+
+<section class="panel" aria-labelledby="h-trend">
+  <div class="panel-head">
+    <h2 id="h-trend">{{ icon('chart-line', 18) }}Evolución por prioridad <span class="muted thin">· últimos 30 días, todos los servidores</span></h2>
+    <a href="/history">{{ icon('rotate-ccw-clock', 15) }} Ver histórico</a>
+  </div>
+  <div class="trend-grid">
+    {{ trend_card("Críticas", "critica", hist.series.critica, hist.labels, "/findings?priority=critica") }}
+    {{ trend_card("Altas", "alta", hist.series.alta, hist.labels, "/findings?priority=alta") }}
+    {{ trend_card("Medias", "media", hist.series.media, hist.labels, "/findings?priority=media") }}
+    {{ trend_card("Bajas", "baja", hist.series.baja, hist.labels, "/findings?priority=baja") }}
+  </div>
+  {% if hist.points < 2 %}
+  <p class="note">{{ icon('info', 14) }} El histórico se arma con una foto diaria de cada servidor (la guarda el worker). Con más días, aquí se verá la tendencia.</p>
+  {% elif hist.synthetic %}
+  <p class="note warn">{{ icon('info', 14) }} Incluye datos de ejemplo generados para la demostración (no son mediciones reales).</p>
+  {% endif %}
+</section>
+
+<div class="columns">
+  <section class="panel grow" aria-labelledby="h-hosts">
+    <div class="panel-head"><h2 id="h-hosts">{{ icon('server', 18) }}Riesgo por host</h2><a href="/hosts">Ver servidores</a></div>
+    {% if hosts %}
+    <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th scope="col">Host</th><th scope="col">Sistema</th><th scope="col">Puertos</th>
+        <th scope="col" class="num">KEV</th><th scope="col">Hallazgos</th><th scope="col">Puntaje</th>
+      </tr></thead>
+      <tbody>
+      {% for h in hosts[:8] %}
+        <tr>
+          <td class="mono"><span class="host-cell">{{ status_badge(h.status, compact=True) }}<a href="/hosts/{{ h.id }}">{{ h.hostname }}</a></span>
+            <div class="sub">{{ h.status.label }} · {{ h.last_seen|ago }}{% if h.pending %} · pendiente de cruce{% endif %}</div></td>
+          <td>{{ h.os_name or "—" }}</td>
+          <td class="mono">{{ h.open_ports or "—" }}</td>
+          <td class="num mono">{{ h.kev }}</td>
+          <td class="counts">
+            {% if h.components and not h.crossable %}<span class="tag" title="Programas y parches de Windows: OSV no tiene datos para cruzarlos">{{ icon('monitor', 13) }}solo inventario</span><div class="sub">{{ h.components|n }} programas y parches</div>{% else %}{{ count_pill(h.critica, 3) }} {{ count_pill(h.alta, 2) }}
+            <div class="sub">{{ h.media|n }} media · {{ h.baja|n }} baja</div>{% endif %}
+          </td>
+          <td>
+            {% set level = 3 if h.risk_score >= 75 else 2 if h.risk_score >= 40 else 1 if h.risk_score >= 15 else 0 %}
+            <div class="score">
+              <div class="bar" role="img" aria-label="Puntaje {{ h.risk_score }} de 100"><div class="bar-fill bar-{{ LEVEL_SLUG[level] }} w-{{ (h.risk_score // 5) * 5 }}"></div></div>
+              <span class="mono">{{ h.risk_score }}</span>
+            </div>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p class="empty">Todavía no llega ningún inventario. Instala el agente en un servidor (ver <a href="/docs/agente">Docs › Instalar el agente</a>).</p>
+    {% endif %}
+  </section>
+
+  <section class="panel side" aria-labelledby="h-dist">
+    <div class="panel-head"><h2 id="h-dist">{{ icon('chart-pie', 18) }}Distribución</h2><span class="muted">hallazgos por prioridad</span></div>
+    {{ donut_panel(dist) }}
+  </section>
+</div>
+
+<div class="columns">
+  <section class="panel grow" aria-labelledby="h-pkg">
+    <div class="panel-head"><h2 id="h-pkg">{{ icon('chart-column', 18) }}Paquetes más vulnerables</h2><span class="muted">CVEs críticos y altos</span></div>
+    {{ packages_chart(packages) }}
+  </section>
+
+  <section class="panel side" aria-labelledby="h-camp">
+    <div class="panel-head"><h2 id="h-camp">{{ icon('radar', 18) }}Campañas recientes</h2><span class="muted">OTX</span></div>
+    <div class="campaign-list" tabindex="0" aria-label="Campañas recientes (se puede desplazar)">
+      {% for c in campaigns %}
+      <article class="campaign">
+        <h3>{{ c.name }}</h3>
+        <p class="sub">{{ c.modified[:10] if c.modified else "" }}{% if c.adversary %} · {{ c.adversary }}{% endif %}</p>
+        <div class="tags">
+          {% for cve in c.cves[:3] %}<a class="tag mono" href="/findings?q={{ cve }}">{{ cve }}</a>{% endfor %}
+          <span class="tag">{{ c.host_count }} host{{ "s" if c.host_count != 1 else "" }}</span>
+        </div>
+      </article>
+      {% else %}
+      <p class="empty">Sin campañas todavía. Requiere la API key de OTX y CVEs relevantes (KEV, EPSS alto o CVSS crítico).</p>
+      {% endfor %}
+    </div>
+    {% if campaigns %}<a href="/campaigns">Ver todas las campañas</a>{% endif %}
+  </section>
+</div>
+
+<section class="panel" aria-labelledby="h-top">
+  <div class="panel-head"><h2 id="h-top">{{ icon('shield-exclamation-point', 18) }}Hallazgos prioritarios</h2><a href="/findings">Ver todos</a></div>
+  {{ findings_table(top) }}
+  <p class="note">{{ icon('info', 14) }} Prioridad: en KEV → Crítica · EPSS ≥ 10 % → Alta · resto según CVSS (≥ 9 Alta, ≥ 7 Media). Sube un nivel si el paquete está detrás de un puerto en escucha.</p>
+</section>
+{% endblock %}

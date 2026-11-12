@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Campañas · Paywen Scan{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Campañas que tocan tu inventario</h1>
+    <p class="muted meta-line">{{ icon('radar', 14) }} Pulses de AlienVault OTX que mencionan CVEs presentes en tus servidores. Se consultan solo los CVEs relevantes: en KEV, EPSS ≥ 10 % o CVSS ≥ 9.</p>
+  </div>
+</div>
+<section class="panel">
+{% if rows %}
+<div class="table-wrap">
+<table>
+  <thead><tr>
+    <th scope="col">Campaña</th><th scope="col">Actualizada</th><th scope="col">Adversario / malware</th>
+    <th scope="col">CVEs</th><th scope="col">Hosts afectados</th>
+  </tr></thead>
+  <tbody>
+  {% for c in rows %}
+    <tr>
+      <td><a class="ext" href="https://otx.alienvault.com/pulse/{{ c.id }}" rel="noopener noreferrer" target="_blank">{{ c.name }}{{ icon('external-link', 12) }}</a>
+        {% if c.tags %}<div class="tags">{% for t in c.tags[:4] %}<span class="tag">{{ t }}</span>{% endfor %}</div>{% endif %}</td>
+      <td class="mono">{{ c.modified[:10] if c.modified else "—" }}</td>
+      <td>{{ c.adversary or "—" }}{% if c.malware %}<div class="sub">{{ icon('bug', 12) }} {{ c.malware|join(", ") }}</div>{% endif %}</td>
+      <td class="mono">{% for cve in c.cves %}<a href="/findings?q={{ cve }}">{{ cve }}</a>{% if not loop.last %}<br>{% endif %}{% endfor %}</td>
+      <td>{{ c.hosts }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="empty">Sin campañas todavía. Revisa que el secreto de la app tenga <code>otx_api_key</code> y que el worker haya corrido.</p>
+{% endif %}
+</section>
+{% endblock %}

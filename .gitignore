@@ -1,0 +1,25 @@
+# Secretos y credenciales: nunca al repositorio
+.env
+*.env
+!*.env.example
+*.pem
+*.key
+token.bin
+curlrc
+
+# Terraform (la infraestructura interna no va en este repositorio)
+*.tfstate
+*.tfstate.*
+.terraform/
+*.tfvars
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# Respaldos y salidas locales
+*.dump
+last-payload.json

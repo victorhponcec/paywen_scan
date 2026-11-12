@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% from "_macros.html" import findings_table, filter_form, status_badge, trend_card, donut_panel, packages_chart %}
+{% block title %}{{ host.hostname }} · Paywen Scan{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="/hosts">Servidores</a> › {{ host.hostname }}</p>
+<div class="page-head">
+  <div>
+    <h1 class="mono host-title">{{ host.hostname }} {{ status_badge(host.status) }}</h1>
+    <p class="muted meta-line">
+      {{ icon('monitor', 14) }} {{ host.os_name or "Sistema desconocido" }}{% if host.kernel %} · kernel {{ host.kernel }}{% endif %} ·
+      IP {{ host.source_ip or "—" }} · {{ icon('clock', 14) }} último inventario {{ host.last_seen|dt }} ({{ host.last_seen|ago }}) ·
+      último cruce {{ host.last_enriched|dt }}
+    </p>
+  </div>
+  <div class="head-actions">
+    <a class="button-link" href="/history?host={{ host.id }}">{{ icon('rotate-ccw-clock', 16) }}Histórico</a>
+    <a class="button-link" href="/findings.csv?host={{ host.id }}">{{ icon('download', 16) }}Exportar CSV</a>
+  </div>
+</div>
+
+<section class="kpis" aria-label="Resumen del host">
+  <div class="kpi"><span class="kpi-icon">{{ icon('gauge', 20) }}</span><span class="kpi-label">Puntaje de riesgo</span><span class="kpi-value">{{ host.risk_score }}<span class="kpi-of">/100</span></span></div>
+  <div class="kpi kpi-alert"><span class="kpi-icon">{{ icon('shield-exclamation-point', 20) }}</span><span class="kpi-label">En KEV</span><span class="kpi-value">{{ host.kev }}</span></div>
+  <div class="kpi"><span class="kpi-icon">{{ icon('ethernet-port', 20) }}</span><span class="kpi-label">Puertos expuestos</span><span class="kpi-value small-value">{{ host.open_ports or "—" }}</span></div>
+  <div class="kpi"><span class="kpi-icon">{{ icon('package', 20) }}</span><span class="kpi-label">Componentes</span><span class="kpi-value">{{ host.components|n }}</span></div>
+</section>
+
+<section class="panel" aria-labelledby="h-trend">
+  <div class="panel-head">
+    <h2 id="h-trend">{{ icon('chart-line', 18) }}Evolución <span class="muted thin">· últimos 30 días</span></h2>
+    <a href="/history?host={{ host.id }}">{{ icon('rotate-ccw-clock', 15) }} Ver histórico completo</a>
+  </div>
+  {% set base = "/hosts/" ~ host.id %}
+  <div class="trend-grid">
+    {{ trend_card("Críticas", "critica", hist.series.critica, hist.labels, base ~ "?priority=critica") }}
+    {{ trend_card("Altas", "alta", hist.series.alta, hist.labels, base ~ "?priority=alta") }}
+    {{ trend_card("Medias", "media", hist.series.media, hist.labels, base ~ "?priority=media") }}
+    {{ trend_card("Bajas", "baja", hist.series.baja, hist.labels, base ~ "?priority=baja") }}
+  </div>
+  {% if hist.synthetic %}<p class="note warn">{{ icon('info', 14) }} Incluye datos de ejemplo generados para la demostración.</p>{% endif %}
+</section>
+
+<div class="columns top">
+  <section class="panel side" aria-labelledby="h-dist">
+    <div class="panel-head"><h2 id="h-dist">{{ icon('chart-pie', 18) }}Distribución</h2></div>
+    {{ donut_panel(dist) }}
+  </section>
+  <section class="panel grow" aria-labelledby="h-pkg">
+    <div class="panel-head"><h2 id="h-pkg">{{ icon('chart-column', 18) }}Paquetes más vulnerables</h2><span class="muted">CVEs críticos y altos</span></div>
+    {{ packages_chart(packages, "/hosts/" ~ host.id) }}
+  </section>
+</div>
+
+<div class="columns">
+  <section class="panel grow" aria-labelledby="h-ports">
+    <div class="panel-head"><h2 id="h-ports">{{ icon('ethernet-port', 18) }}Puertos en escucha</h2></div>
+    {% if ports %}
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">Proto</th><th scope="col">Dirección</th><th scope="col" class="num">Puerto</th><th scope="col">Proceso</th></tr></thead>
+      <tbody>
+      {% for p in ports %}
+        {% set local = (p.address or "").startswith(("127.", "[::1]", "::1")) %}
+        <tr><td>{{ p.proto }}</td><td class="mono">{{ p.address }}{% if local %} <span class="tag">solo local</span>{% endif %}</td>
+          <td class="num mono">{% if p.port and not local %}<a href="/hosts/{{ host.id }}?port={{ p.port }}">{{ p.port }}</a>{% else %}{{ p.port or "—" }}{% endif %}</td>
+          <td class="mono sub">{{ p.process }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}<p class="empty">El agente no reportó puertos.</p>{% endif %}
+  </section>
+  <section class="panel side" aria-labelledby="h-eco">
+    <div class="panel-head"><h2 id="h-eco">{{ icon('package', 18) }}Inventario por ecosistema</h2></div>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">Ecosistema</th><th scope="col" class="num">Componentes</th><th scope="col" class="num">Con CVE</th></tr></thead>
+      <tbody>
+      {% for e in ecosystems %}
+        {% if e.inventory_only %}
+        <tr><td><a href="#inventario">{{ e.ecosystem }}</a> <span class="tag" title="OSV no tiene datos de vulnerabilidades para este tipo de componente">solo inventario</span></td><td class="num mono">{{ e.components|n }}</td><td class="num mono muted">—</td></tr>
+        {% else %}
+        <tr><td><a href="/hosts/{{ host.id }}?eco={{ e.ecosystem|urlencode }}">{{ e.ecosystem }}</a></td><td class="num mono">{{ e.components|n }}</td><td class="num mono">{{ e.affected|n }}</td></tr>
+        {% endif %}
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </section>
+</div>
+
+{% if inventory %}
+<section class="panel" id="inventario" aria-labelledby="h-inv">
+  <div class="panel-head">
+    <h2 id="h-inv">{{ icon('monitor', 18) }}Software instalado</h2>
+    <span class="muted">{% for eco, items in inventory.items() %}{{ items|length|n }} {{ "parches KB" if eco == "Windows KB" else "programas" }}{% if not loop.last %} · {% endif %}{% endfor %}</span>
+  </div>
+  <p class="note top">{{ icon('info', 14) }} Inventario enviado por el agente de Windows (registro de programas y parches instalados). OSV no tiene datos de vulnerabilidades de Windows ni de sus programas, así que aquí no se calculan hallazgos. Las librerías que detecta Trivy (NuGet, npm, PyPI, Java…) sí se cruzan y aparecen en Hallazgos.</p>
+  <div class="inventory-grid">
+    {% for eco, items in inventory.items() %}
+    <div class="inventory-block">
+      <h3>{{ icon('tag' if eco == "Windows KB" else 'package', 15) }} {{ "Parches de Windows (KB)" if eco == "Windows KB" else "Programas" }}</h3>
+      <div class="table-wrap scroll-y">
+      <table>
+        <thead><tr><th scope="col">{{ "Parche" if eco == "Windows KB" else "Nombre" }}</th><th scope="col">{{ "Instalado" if eco == "Windows KB" else "Versión" }}</th>{% if eco != "Windows KB" %}<th scope="col">Fabricante</th>{% endif %}</tr></thead>
+        <tbody>
+        {% for c in items %}
+          <tr><td>{{ c.name }}</td><td class="mono">{{ c.version }}</td>{% if eco != "Windows KB" %}<td class="sub">{{ c.publisher or "—" }}</td>{% endif %}</tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<section class="panel" aria-labelledby="h-find">
+  <div class="panel-head"><h2 id="h-find">{{ icon('bug', 18) }}Hallazgos de este host</h2><span class="muted">{{ rows|length }}{% if rows|length >= 500 %} (los 500 de mayor prioridad){% endif %}</span></div>
+  {{ filter_form(f, "/hosts/" ~ host.id, options) }}
+  {{ findings_table(rows, show_hosts=False) }}
+</section>
+{% endblock %}

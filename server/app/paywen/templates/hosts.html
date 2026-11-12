@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% from "_macros.html" import count_pill, status_badge %}
+{% block title %}Servidores · Paywen Scan{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Servidores</h1>
+    <p class="muted">{{ rows|length }} de {{ total }} servidores · el estado depende de cuánto hace que el agente envió su último inventario</p>
+  </div>
+</div>
+
+<section class="kpis small" aria-label="Estado de los agentes">
+  {% for key, label in STATUS_LABELS.items() %}
+  <a class="kpi status-kpi status-kpi-{{ key }}{% if f.status == key %} is-active{% endif %}" href="/hosts?status={{ key }}">
+    <span class="kpi-icon">{{ icon('wifi-off' if key == 'offline' else 'wifi', 20) }}</span>
+    <span class="kpi-label">{{ label }}</span>
+    <span class="kpi-value">{{ status[key] }}</span>
+  </a>
+  {% endfor %}
+</section>
+
+<section class="panel">
+  <form class="filters" method="get" action="/hosts">
+    <div class="filters-row">
+      <label><span class="lbl">{{ icon('monitor', 14) }} Sistema operativo</span>
+        <select name="os">
+          <option value="">Todos</option>
+          {% for o in options.os %}<option value="{{ o }}" {% if f.os == o %}selected{% endif %}>{{ o }}</option>{% endfor %}
+        </select>
+      </label>
+      <label><span class="lbl">{{ icon('wifi', 14) }} Estado</span>
+        <select name="status">
+          <option value="">Todos</option>
+          {% for key, label in STATUS_LABELS.items() %}<option value="{{ key }}" {% if f.status == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="grow">Buscar <input type="search" name="q" value="{{ f.q or '' }}" placeholder="Nombre o IP"></label>
+      <button type="submit">{{ icon('funnel', 16) }}Filtrar</button>
+      <a class="button-link" href="/hosts">Limpiar</a>
+    </div>
+  </form>
+  {% if rows %}
+  <div class="table-wrap">
+  <table>
+    <thead><tr>
+      <th scope="col">Estado</th><th scope="col">Host</th><th scope="col">Sistema</th><th scope="col">Último inventario</th>
+      <th scope="col">Puertos</th><th scope="col" class="num">Componentes</th><th scope="col" class="num">KEV</th>
+      <th scope="col">Hallazgos</th><th scope="col" class="num">Puntaje</th>
+    </tr></thead>
+    <tbody>
+    {% for h in rows %}
+      <tr>
+        <td>{{ status_badge(h.status) }}</td>
+        <td class="mono"><a href="/hosts/{{ h.id }}">{{ h.hostname }}</a><div class="sub">{{ h.source_ip or "—" }}</div></td>
+        <td>{{ h.os_name or "—" }}<div class="sub mono">{{ h.kernel or "" }}</div></td>
+        <td>{{ h.last_seen|ago }}<div class="sub">{{ h.last_seen|dt }}</div></td>
+        <td class="mono">{{ h.open_ports or "—" }}</td>
+        <td class="num mono">{{ h.components|n }}</td>
+        <td class="num mono">{{ h.kev }}</td>
+        <td class="counts">{% if h.components and not h.crossable %}<span class="tag" title="Programas y parches de Windows: OSV no tiene datos para cruzarlos">{{ icon('monitor', 13) }}solo inventario</span><div class="sub">{{ h.components|n }} programas y parches</div>{% else %}{{ count_pill(h.critica, 3) }} {{ count_pill(h.alta, 2) }}
+          <div class="sub">{{ h.media|n }} media · {{ h.baja|n }} baja</div>{% endif %}</td>
+        <td class="num mono">{{ h.risk_score }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="empty">No hay servidores con estos filtros.</p>
+  {% endif %}
+  <p class="note">{{ icon('info', 14) }} {{ hint }}. Si el servidor de Paywen estuvo apagado, el atraso se cuenta desde que volvió a estar disponible.</p>
+</section>
+{% endblock %}

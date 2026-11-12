@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}{{ page.page.title if page else "Documentación" }} · Paywen Scan{% endblock %}
+{% block content %}
+<div class="docs-layout">
+  <aside class="docs-nav panel" aria-label="Documentación">
+    <a class="docs-home {% if not page %}is-active{% endif %}" href="/docs">{{ icon('book-open', 16) }}Documentación</a>
+    {% for p in pages %}
+    <a href="/docs/{{ p.slug }}" {% if page and page.page.slug == p.slug %}aria-current="page"{% endif %}>{{ icon(p.icon, 16) }}{{ p.title }}</a>
+    {% if page and page.page.slug == p.slug and page.toc %}
+    <ul class="docs-toc">
+      {% for t in page.toc %}<li><a href="#{{ t.id }}">{{ t.name|striptags }}</a></li>{% endfor %}
+    </ul>
+    {% endif %}
+    {% endfor %}
+  </aside>
+
+  <div class="docs-main">
+  {% if page %}
+    <p class="crumbs"><a href="/docs">Documentación</a> › {{ page.page.title }}</p>
+    <article class="panel prose">
+      <h1>{{ page.page.title }}</h1>
+      {{ page.html }}
+    </article>
+  {% else %}
+    <div class="page-head"><div><h1>Documentación</h1>
+      <p class="muted">Manuales de Paywen Scan v{{ version }}. Las mismas guías vienen en PDF junto a los instaladores.</p></div></div>
+    <figure class="panel diagram-panel">
+      <figcaption>{{ icon('chart-column', 16) }} Arquitectura</figcaption>
+      <img src="{{ url_for('static', path='img/arquitectura.svg') }}" alt="Arquitectura: los agentes envían el inventario por HTTPS a la API; el worker lo cruza con OSV, CISA KEV, FIRST EPSS y AlienVault OTX; el dashboard muestra los resultados guardados en PostgreSQL." width="1100" height="430">
+    </figure>
+    <div class="doc-cards">
+      {% for p in pages %}
+      <a class="doc-card panel" href="/docs/{{ p.slug }}">
+        <span class="kpi-icon">{{ icon(p.icon, 20) }}</span>
+        <h2>{{ p.title }}</h2>
+        <p class="muted">{{ p.summary }}</p>
+      </a>
+      {% endfor %}
+    </div>
+  {% endif %}
+  </div>
+</div>
+{% endblock %}

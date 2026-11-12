@@ -1,0 +1,186 @@
+#!/bin/bash
+# Administración de Paywen Scan (instalación portable).
+#
+#   sudo paywen-server status         estado de los contenedores y de la app
+#   sudo paywen-server credentials    URL, usuario, contraseña y token de agentes
+#   sudo paywen-server agent-command  comando listo para instalar el agente en otra VM
+#   sudo paywen-server logs [svc]     logs en vivo (api, worker, db, caddy; todos si se omite)
+#   sudo paywen-server worker         lanza una pasada del worker ahora
+#   sudo paywen-server psql           consola SQL como administrador (paywen_admin)
+#   sudo paywen-server backup [dir]   respaldo de la base (pg_dump) en dir (por omisión /var/backups/paywen)
+#   sudo paywen-server restore FILE   restaura un respaldo (borra los datos actuales)
+#   sudo paywen-server reconfigure    regenera el certificado/Caddyfile (por ejemplo, si cambió la IP)
+#   sudo paywen-server restart|stop|start
+#   sudo paywen-server update         reconstruye la imagen desde /opt/paywen-server/app y reinicia
+#   sudo paywen-server demo DÍAS      genera datos de ejemplo para el histórico (demo --clear los borra)
+#   sudo paywen-server version        versión instalada
+
+set -euo pipefail
+
+PREFIX=$(cat /etc/paywen-server/prefix 2>/dev/null || echo /opt/paywen-server)
+ENV_FILE="$PREFIX/.env"
+
+[ "$(id -u)" -eq 0 ] || { echo "Ejecutar con sudo" >&2; exit 1; }
+[ -f "$PREFIX/compose.yaml" ] || { echo "No encuentro $PREFIX/compose.yaml. ¿Está instalado?" >&2; exit 1; }
+
+dc() { docker compose --project-directory "$PREFIX" -f "$PREFIX/compose.yaml" "$@"; }
+envget() { sed -n "s/^$1=//p" "$ENV_FILE" | tail -n 1; }
+
+local_ips() {
+  # IPv4 de las interfaces reales (no las de Docker: docker0, br-*, veth*).
+  ip -4 -o addr show scope global 2>/dev/null \
+    | awk '$2 !~ /^(docker|br-|veth)/ { split($4, a, "/"); print a[1] }' || true
+}
+
+server_urls() {
+  local domain
+  domain=$(envget DOMAIN)
+  if [ -n "$domain" ]; then
+    echo "https://$domain"
+  else
+    for ip in $(local_ips); do echo "https://$ip"; done
+    echo "https://localhost"
+  fi
+}
+
+write_caddyfile() {
+  local domain email extra first addrs
+  domain=$(envget DOMAIN)
+  email=$(envget ACME_EMAIL)
+  extra=$(envget EXTRA_HOSTS)
+  if [ -n "$domain" ]; then
+    {
+      if [ -n "$email" ]; then printf '{\n\temail %s\n}\n\n' "$email"; fi
+      printf '%s {\n\tencode gzip\n\treverse_proxy api:8000\n}\n' "$domain"
+    } > "$PREFIX/Caddyfile"
+  else
+    addrs=""
+    first=""
+    for h in $(local_ips) $extra localhost; do
+      [ -n "$first" ] || first="$h"
+      addrs="$addrs${addrs:+, }https://$h"
+    done
+    {
+      printf '# Generado por paywen-server. Certificado interno (autofirmado) para:\n'
+      printf '# %s\n' "$addrs"
+      printf '{\n\tdefault_sni %s\n}\n\n' "$first"
+      printf '%s {\n\ttls internal\n\tencode gzip\n\treverse_proxy api:8000\n}\n' "$addrs"
+    } > "$PREFIX/Caddyfile"
+  fi
+  chmod 644 "$PREFIX/Caddyfile"
+}
+
+health() {
+  local domain
+  domain=$(envget DOMAIN)
+  if [ -n "$domain" ]; then
+    # Directo a esta máquina, aunque el DNS del dominio no resuelva desde aquí.
+    curl -fsSk --max-time 5 --resolve "$domain:443:127.0.0.1" "https://$domain/healthz" 2>/dev/null
+  else
+    curl -fsSk --max-time 5 "https://localhost/healthz" 2>/dev/null
+  fi
+}
+
+cmd="${1:-status}"
+shift || true
+
+case "$cmd" in
+  status)
+    dc ps
+    echo
+    if out=$(health); then echo "App: OK $out"; else echo "App: no responde todavía (ver: sudo paywen-server logs api)"; fi
+    ;;
+  credentials)
+    echo "Dashboard:"
+    server_urls | sed 's/^/  /'
+    echo "  Usuario:     $(envget DASHBOARD_USER)"
+    echo "  Contraseña:  $(envget DASHBOARD_PASSWORD)"
+    echo
+    echo "Token de agentes: $(envget AGENT_TOKEN)"
+    echo
+    echo "Base de datos (solo accesible dentro de Docker):"
+    echo "  paywen_admin / $(envget POSTGRES_PASSWORD)   (administrador)"
+    echo "  paywen_app   / $(envget APP_DB_PASSWORD)   (la usa la app)"
+    ;;
+  agent-command)
+    url=$(server_urls | head -n 1)
+    insecure="--insecure"
+    [ -z "$(envget DOMAIN)" ] || insecure=""
+    winsec=""
+    [ -z "$insecure" ] || winsec=" -Insecure"
+    echo "Linux (con el contenido de paywen-agent.zip):"
+    echo
+    echo "  sudo ./install.sh --url $url --token $(envget AGENT_TOKEN) --name NOMBRE-UNICO --interval 1h $insecure"
+    echo
+    echo "Windows (PowerShell de 64 bits como administrador, con paywen-agent-windows.zip en C:\\PaywenSetup):"
+    echo
+    echo "  .\\install.ps1 -Url \"$url\" -Name \"NOMBRE-UNICO\"$winsec"
+    echo "  (pide el token de forma oculta: pega $(envget AGENT_TOKEN))"
+    ;;
+  logs)
+    dc logs --tail 100 -f "$@"
+    ;;
+  worker)
+    # Reinicia el bucle del worker: empieza una pasada de inmediato.
+    dc restart worker
+    echo "Pasada del worker iniciada. Para seguirla: sudo paywen-server logs worker"
+    ;;
+  psql)
+    dc exec db psql -U paywen_admin -d paywen "$@"
+    ;;
+  backup)
+    dir="${1:-/var/backups/paywen}"
+    install -d -m 700 "$dir"
+    file="$dir/paywen-$(date +%Y%m%d-%H%M%S).dump"
+    dc exec -T db pg_dump -U paywen_admin -d paywen -Fc > "$file"
+    chmod 600 "$file"
+    echo "Respaldo: $file ($(du -h "$file" | cut -f1))"
+    ;;
+  restore)
+    file="${1:?Uso: paywen-server restore ARCHIVO.dump}"
+    [ -f "$file" ] || { echo "No existe $file" >&2; exit 1; }
+    read -r -p "Esto BORRA los datos actuales y restaura $file. ¿Continuar? [s/N] " ok
+    [ "$ok" = "s" ] || [ "$ok" = "S" ] || exit 1
+    dc stop api worker
+    dc exec -T db pg_restore -U paywen_admin -d paywen --clean --if-exists --no-owner --role=paywen_app < "$file"
+    dc start api worker
+    echo "Restaurado."
+    ;;
+  reconfigure)
+    write_caddyfile
+    echo "Caddyfile:"
+    sed 's/^/  /' "$PREFIX/Caddyfile"
+    dc restart caddy
+    ;;
+  restart|stop|start)
+    dc "$cmd"
+    ;;
+  update)
+    dc build api
+    dc up -d
+    echo "Actualizado. Estado: sudo paywen-server status"
+    ;;
+  demo)
+    arg="${1:-30}"
+    if [ "$arg" = "--clear" ]; then
+      dc exec -T api python -m paywen.demo --clear
+    else
+      [[ "$arg" =~ ^[0-9]+$ ]] || { echo "Uso: paywen-server demo DÍAS | demo --clear" >&2; exit 1; }
+      dc exec -T api python -m paywen.demo --days "$arg"
+    fi
+    ;;
+  version)
+    echo "Instalada: $(cat "$PREFIX/VERSION" 2>/dev/null || echo desconocida)"
+    if out=$(health); then echo "En ejecución: $out"; fi
+    ;;
+  _caddyfile)   # uso interno del instalador
+    write_caddyfile
+    ;;
+  -h|--help|help)
+    sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'
+    ;;
+  *)
+    echo "Comando desconocido: $cmd (ver: paywen-server help)" >&2
+    exit 1
+    ;;
+esac

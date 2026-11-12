@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Histórico · Paywen Scan{% endblock %}
+{% block content %}
+{% set s = hist.series %}
+<div class="page-head">
+  <div>
+    <h1>Histórico</h1>
+    <p class="muted">{{ selected.hostname if selected else "Todos los servidores (consolidado)" }} · últimos {{ days }} días · una foto diaria por servidor</p>
+  </div>
+  <form class="filters inline" method="get" action="/history">
+    <input type="hidden" name="days" value="{{ days }}">
+    <label><span class="lbl">{{ icon('server', 14) }} Servidor</span>
+      <select name="host">
+        <option value="">Consolidado</option>
+        {% for h in options.hosts %}<option value="{{ h.id }}" {% if selected and selected.id == h.id %}selected{% endif %}>{{ h.hostname }}</option>{% endfor %}
+      </select>
+    </label>
+    <button type="submit">Ver</button>
+  </form>
+</div>
+
+<nav class="segmented" aria-label="Período">
+  {% for r in ranges %}
+  <a href="/history?days={{ r }}{% if selected %}&host={{ selected.id }}{% endif %}" {% if r == days %}aria-current="page"{% endif %}>{{ r }} días</a>
+  {% endfor %}
+</nav>
+
+{% if not hist.has_data %}
+<section class="panel">
+  <p class="empty">{{ icon('info', 16) }} Todavía no hay fotos en este período. El worker guarda una foto por servidor en cada pasada; la primera aparece apenas termina la próxima.</p>
+</section>
+{% else %}
+{% if hist.synthetic %}<p class="note warn banner">{{ icon('info', 15) }} Este período incluye datos de ejemplo generados para la demostración (no son mediciones reales). Se borran con <code>python -m paywen.demo --clear</code>.</p>
+{% elif hist.points < 3 %}<p class="note banner">{{ icon('info', 15) }} Hay {{ hist.points }} día{{ "s" if hist.points != 1 else "" }} con datos: el histórico crece con una foto por día.</p>{% endif %}
+
+<section class="panel" aria-labelledby="h-prio">
+  <div class="panel-head"><h2 id="h-prio">{{ icon('chart-line', 18) }}Hallazgos por prioridad</h2><span class="muted">cada gráfico con su propia escala</span></div>
+  <div class="chart-grid">
+    {% for name, slug in [("Críticas", "critica"), ("Altas", "alta"), ("Medias", "media"), ("Bajas", "baja")] %}
+    {% set tr = trend(s[slug], days) %}
+    <figure class="chart-card">
+      <figcaption><span class="swatch s-{{ slug }}"></span>{{ name }}
+        {% if tr %}<span class="delta {{ 'delta-bad' if tr.delta > 0 else 'delta-good' if tr.delta < 0 else 'delta-flat' }}">{{ icon('trending-up' if tr.delta > 0 else 'trending-down', 14) if tr.delta else '' }}{{ tr.delta|delta }} en el período</span>{% endif %}
+      </figcaption>
+      {{ charts.lines(hist.labels, [(name, "s-" ~ slug, s[slug])], width=520, height=200) }}
+    </figure>
+    {% endfor %}
+  </div>
+</section>
+
+<div class="columns">
+  <section class="panel grow" aria-labelledby="h-kev">
+    <div class="panel-head"><h2 id="h-kev">{{ icon('shield-exclamation-point', 18) }}Vulnerabilidades explotadas</h2><span class="muted">CVEs únicos en KEV y con ransomware</span></div>
+    {{ charts.lines(hist.labels, [("En KEV", "s-kev", s.kev), ("Ransomware", "s-ransom", s.ransomware)], width=540, height=220) }}
+    <div class="legend-inline"><span><span class="swatch s-kev"></span>En KEV</span><span><span class="swatch s-ransom"></span>Ransomware</span></div>
+  </section>
+  <section class="panel grow" aria-labelledby="h-score">
+    <div class="panel-head"><h2 id="h-score">{{ icon('gauge', 18) }}Puntaje de riesgo</h2><span class="muted">{{ "del servidor" if selected else "promedio de los servidores" }} (0–100)</span></div>
+    {{ charts.lines(hist.labels, [("Puntaje", "s-score", s.risk_score)], width=540, height=220) }}
+  </section>
+</div>
+
+<section class="panel" aria-labelledby="h-new">
+  <div class="panel-head"><h2 id="h-new">{{ icon('chart-column', 18) }}Nuevas y resueltas por día</h2><span class="muted">vulnerabilidades que aparecen o desaparecen del inventario</span></div>
+  {{ charts.bars(hist.labels, [("Nuevas", "s-new", s.new_vulns), ("Resueltas", "s-resolved", s.resolved_vulns)], width=1120, height=240) }}
+  <div class="legend-inline"><span><span class="swatch s-new"></span>Nuevas</span><span><span class="swatch s-resolved"></span>Resueltas</span></div>
+  <p class="note">{{ icon('info', 14) }} Lo que ya tenía un servidor la primera vez que se cruzó es la línea base: no cuenta como "nueva". Una vulnerabilidad se resuelve cuando deja de aparecer (se actualizó o desinstaló el paquete).</p>
+</section>
+
+{% if not selected and hist.per_host|length > 1 %}
+<section class="panel" aria-labelledby="h-hosts">
+  <div class="panel-head"><h2 id="h-hosts">{{ icon('server', 18) }}Por servidor</h2><span class="muted">críticas + altas</span></div>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th scope="col">Servidor</th><th scope="col">Tendencia</th><th scope="col" class="num">Actual</th><th scope="col" class="num">Variación</th></tr></thead>
+    <tbody>
+    {% for hid, vals in hist.per_host.items() %}
+      {% set tr = trend(vals, days) %}
+      {% set known = vals|reject('none')|list %}
+      <tr>
+        <td class="mono"><a href="/history?host={{ hid }}&days={{ days }}">{{ names.get(hid, hid) }}</a></td>
+        <td class="spark-cell">{{ charts.spark(vals, hist.labels, "s-alta", "Críticas + altas", width=220, height=36) }}</td>
+        <td class="num mono">{{ (known[-1] if known else 0)|n }}</td>
+        <td class="num">{% if tr %}<span class="delta {{ 'delta-bad' if tr.delta > 0 else 'delta-good' if tr.delta < 0 else 'delta-flat' }}">{{ tr.delta|delta }}</span>{% else %}—{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endif %}
+
+<details class="panel data-table">
+  <summary>{{ icon('info', 15) }} Ver los datos en tabla</summary>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th scope="col">Día</th><th class="num">Críticas</th><th class="num">Altas</th><th class="num">Medias</th><th class="num">Bajas</th>
+      <th class="num">KEV</th><th class="num">Ransomware</th><th class="num">Únicas</th><th class="num">Nuevas</th><th class="num">Resueltas</th><th class="num">Puntaje</th></tr></thead>
+    <tbody>
+    {% for i in range(hist.dates|length)|reverse %}
+      {% if s.critica[i] is not none %}
+      <tr><td class="mono">{{ hist.dates[i].strftime('%d-%m-%Y') }}</td>
+        {% for k in ["critica", "alta", "media", "baja", "kev", "ransomware", "unique_vulns", "new_vulns", "resolved_vulns", "risk_score"] %}
+        <td class="num mono">{{ s[k][i]|n }}</td>{% endfor %}</tr>
+      {% endif %}
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</details>
+{% endif %}
+{% endblock %}

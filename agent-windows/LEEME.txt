@@ -1,0 +1,31 @@
+PAYWEN SCAN - AGENTE DE WINDOWS 1.0.1
+======================================
+
+Guia completa: INSTALAR-AGENTE-WINDOWS.pdf (o .md) en este mismo zip.
+
+1. Descomprima el zip en C:\PaywenSetup.
+2. Abra Windows PowerShell de 64 bits como administrador.
+3. Ejecute (cambie la URL y el nombre del equipo):
+
+   cd C:\PaywenSetup
+   Unblock-File .\install.ps1
+   .\install.ps1 -Url "https://paywen.ejemplo.cl" -Name "srv-win-01"
+
+   El token se pide de forma oculta; no esta en estos archivos.
+
+Opciones:
+   -Insecure                 servidor con certificado interno (por IP)
+   -InstallTrivy -ScanPaths "C:\inetpub","C:\apps"
+                             librerias de aplicaciones con Trivy 0.69.3 (SHA-256 verificado)
+   -IntervalHours 1..24      cada cuantas horas envia (por omision 1)
+   -Force                    reemplazar una instalacion existente
+
+Operacion (PowerShell como administrador):
+   & "$env:ProgramData\PaywenAgent\agent.ps1" -Mode Run
+   & "$env:ProgramData\PaywenAgent\agent.ps1" -Mode Run -CollectOnly
+   & "$env:ProgramData\PaywenAgent\agent.ps1" -Mode Status
+   & "$env:ProgramData\PaywenAgent\agent.ps1" -Mode Uninstall
+
+Alcance: los programas y parches KB se muestran como inventario (OSV no tiene
+datos de Windows). Los hallazgos salen de las librerias que encuentra Trivy.
+Cero hallazgos no significa un equipo sin vulnerabilidades.

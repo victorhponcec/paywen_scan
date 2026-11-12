@@ -1,0 +1,210 @@
+{
+  "hostname": "srv-win-01",
+  "collected_at": "2026-11-12T16:21:58Z",
+  "agent": {
+    "name": "paywen-agent-windows",
+    "version": "1.0.0"
+  },
+  "os": {
+    "id": "windows",
+    "version_id": "10.0.20348",
+    "name": "Microsoft Windows Server 2022 Datacenter (21H2)",
+    "kernel": "10.0.20348.2582"
+  },
+  "ports": [
+    {
+      "proto": "tcp",
+      "address": "[::]:80",
+      "port": 80,
+      "process": "users:((\"system\",pid=4,fd=0))"
+    },
+    {
+      "proto": "tcp",
+      "address": "0.0.0.0:80",
+      "port": 80,
+      "process": "users:((\"system\",pid=4,fd=0))"
+    },
+    {
+      "proto": "tcp",
+      "address": "0.0.0.0:3389",
+      "port": 3389,
+      "process": "users:((\"svchost\",pid=900,fd=0))"
+    },
+    {
+      "proto": "tcp",
+      "address": "127.0.0.1:5000",
+      "port": 5000,
+      "process": "users:((\"w3wp\",pid=1500,fd=0))"
+    },
+    {
+      "proto": "tcp",
+      "address": "0.0.0.0:8080",
+      "port": 8080,
+      "process": "users:((\"node\",pid=2100,fd=0))"
+    },
+    {
+      "proto": "udp",
+      "address": "0.0.0.0:5353",
+      "port": 5353,
+      "process": "users:((\"svchost\",pid=900,fd=0))"
+    }
+  ],
+  "sbom": {
+    "bomFormat": "CycloneDX",
+    "specVersion": "1.5",
+    "version": 1,
+    "serialNumber": "urn:uuid:12da144d-e5be-4c0c-bc44-4be389bb1cb7",
+    "metadata": {
+      "timestamp": "2026-11-12T16:21:58Z",
+      "tools": [
+        {
+          "name": "paywen-agent-windows",
+          "version": "1.0.0"
+        }
+      ]
+    },
+    "components": [
+      {
+        "type": "application",
+        "name": "7-Zip 23.01 (x64)",
+        "version": "23.01",
+        "bom-ref": "pkg:generic/7-Zip%2023.01%20%28x64%29@23.01?publisher=Igor%20Pavlov",
+        "purl": "pkg:generic/7-Zip%2023.01%20%28x64%29@23.01?publisher=Igor%20Pavlov"
+      },
+      {
+        "type": "application",
+        "name": "Amazon SSM Agent",
+        "version": "3.3.40.0",
+        "bom-ref": "pkg:generic/Amazon%20SSM%20Agent@3.3.40.0?publisher=Amazon%20Web%20Services",
+        "purl": "pkg:generic/Amazon%20SSM%20Agent@3.3.40.0?publisher=Amazon%20Web%20Services"
+      },
+      {
+        "type": "application",
+        "name": "Google Chrome",
+        "version": "130.0.6723.70",
+        "bom-ref": "pkg:generic/Google%20Chrome@130.0.6723.70?publisher=Google%20LLC",
+        "purl": "pkg:generic/Google%20Chrome@130.0.6723.70?publisher=Google%20LLC"
+      },
+      {
+        "type": "application",
+        "name": "Notepad++ (64-bit x64)",
+        "version": "8.6.2",
+        "bom-ref": "pkg:generic/Notepad%2B%2B%20%2864-bit%20x64%29@8.6.2?publisher=Notepad%2B%2B%20Team",
+        "purl": "pkg:generic/Notepad%2B%2B%20%2864-bit%20x64%29@8.6.2?publisher=Notepad%2B%2B%20Team"
+      },
+      {
+        "type": "application",
+        "name": "KB5034439",
+        "version": "2026-10-15",
+        "bom-ref": "pkg:generic/microsoft-hotfix/KB5034439@2026-10-15?publisher=Security%20Update",
+        "purl": "pkg:generic/microsoft-hotfix/KB5034439@2026-10-15?publisher=Security%20Update"
+      },
+      {
+        "type": "application",
+        "name": "KB5041160",
+        "version": "instalado",
+        "bom-ref": "pkg:generic/microsoft-hotfix/KB5041160@instalado?publisher=Update",
+        "purl": "pkg:generic/microsoft-hotfix/KB5041160@instalado?publisher=Update"
+      },
+      {
+        "bom-ref": "pkg:npm/lodash@4.17.20",
+        "type": "library",
+        "name": "lodash",
+        "version": "4.17.20",
+        "purl": "pkg:npm/lodash@4.17.20",
+        "properties": [
+          {
+            "name": "aquasecurity:trivy:PkgID",
+            "value": "lodash@4.17.20"
+          },
+          {
+            "name": "aquasecurity:trivy:PkgType",
+            "value": "npm"
+          }
+        ]
+      },
+      {
+        "bom-ref": "pkg:nuget/System.Text.Encodings.Web@4.5.0",
+        "type": "library",
+        "name": "System.Text.Encodings.Web",
+        "version": "4.5.0",
+        "purl": "pkg:nuget/System.Text.Encodings.Web@4.5.0",
+        "properties": [
+          {
+            "name": "aquasecurity:trivy:PkgID",
+            "value": "System.Text.Encodings.Web@4.5.0"
+          },
+          {
+            "name": "aquasecurity:trivy:PkgType",
+            "value": "nuget"
+          }
+        ]
+      },
+      {
+        "bom-ref": "pkg:pypi/requests@2.25.0",
+        "type": "library",
+        "name": "requests",
+        "version": "2.25.0",
+        "purl": "pkg:pypi/requests@2.25.0",
+        "properties": [
+          {
+            "name": "aquasecurity:trivy:PkgType",
+            "value": "pip"
+          }
+        ]
+      },
+      {
+        "bom-ref": "pkg:nuget/Newtonsoft.Json@12.0.1",
+        "type": "library",
+        "name": "Newtonsoft.Json",
+        "version": "12.0.1",
+        "purl": "pkg:nuget/Newtonsoft.Json@12.0.1",
+        "properties": [
+          {
+            "name": "aquasecurity:trivy:PkgID",
+            "value": "Newtonsoft.Json@12.0.1"
+          },
+          {
+            "name": "aquasecurity:trivy:PkgType",
+            "value": "nuget"
+          }
+        ]
+      },
+      {
+        "bom-ref": "pkg:npm/express@4.17.1",
+        "type": "library",
+        "name": "express",
+        "version": "4.17.1",
+        "purl": "pkg:npm/express@4.17.1",
+        "properties": [
+          {
+            "name": "aquasecurity:trivy:PkgID",
+            "value": "express@4.17.1"
+          },
+          {
+            "name": "aquasecurity:trivy:PkgType",
+            "value": "npm"
+          }
+        ]
+      },
+      {
+        "bom-ref": "pkg:pypi/django@3.2.0",
+        "type": "library",
+        "name": "django",
+        "version": "3.2.0",
+        "purl": "pkg:pypi/django@3.2.0",
+        "properties": [
+          {
+            "name": "aquasecurity:trivy:PkgType",
+            "value": "pip"
+          }
+        ]
+      }
+    ]
+  },
+  "summary": {
+    "applications": 4,
+    "hotfixes": 2,
+    "libraries": 6
+  }
+}

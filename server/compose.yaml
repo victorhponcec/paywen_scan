@@ -1,0 +1,105 @@
+# Paywen Scan — instalación con Docker en una sola máquina.
+#
+# Servicios:
+#   db      PostgreSQL 16. Solo en la red interna "backend": no publica puertos
+#           ni tiene salida a internet.
+#   api     API + dashboard (puerto 8000, solo accesible desde Caddy).
+#   worker  enriquecimiento (OSV, KEV, EPSS, OTX) en bucle, cada WORKER_INTERVAL_SECONDS.
+#   caddy   HTTPS en 80/443 (certificado interno o Let's Encrypt).
+#
+# Todo tiene restart: unless-stopped: con Docker habilitado al arranque, los
+# contenedores vuelven a subir solos después de reiniciar la máquina.
+#
+# Los secretos salen de .env (lo genera install-server.sh, permisos 600).
+# Administración: el comando paywen-server (ver INSTALAR-SERVIDOR.md).
+
+name: paywen
+
+x-app-env: &app-env
+  DATABASE_URL: postgresql://paywen_app:${APP_DB_PASSWORD:?falta APP_DB_PASSWORD en .env}@db:5432/paywen
+  AGENT_TOKEN: ${AGENT_TOKEN:?falta AGENT_TOKEN en .env}
+  DASHBOARD_USER: ${DASHBOARD_USER:-admin}
+  DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:?falta DASHBOARD_PASSWORD en .env}
+  OTX_API_KEY: ${OTX_API_KEY:-}
+  DISPLAY_TZ: ${DISPLAY_TZ:-America/Santiago}
+  # Estado de los agentes: atrasado (naranjo) y sin reportar (rojo), en horas.
+  STATUS_WARN_HOURS: ${STATUS_WARN_HOURS:-2}
+  STATUS_OFFLINE_HOURS: ${STATUS_OFFLINE_HOURS:-6}
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: paywen
+      POSTGRES_USER: paywen_admin
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?falta POSTGRES_PASSWORD en .env}
+      # Solo lo usa db-init/01-app-user.sh la primera vez (volumen vacío).
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U paywen_admin -d paywen"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    networks: [backend]
+    logging: *logging
+
+  api:
+    build: ./app
+    image: paywen-scan:local
+    restart: unless-stopped
+    environment: *app-env
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [backend, frontend]
+    logging: *logging
+
+  worker:
+    image: paywen-scan:local
+    pull_policy: never
+    restart: unless-stopped
+    environment: *app-env
+    # Una pasada, espera y repite. Si una pasada falla, igual sigue el bucle.
+    command: ["sh", "-c", "while true; do python -m worker; sleep ${WORKER_INTERVAL_SECONDS:-1800}; done"]
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        condition: service_started
+    networks: [backend, frontend]
+    logging: *logging
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+    networks: [frontend]
+    logging: *logging
+
+networks:
+  backend:
+    internal: true   # la base no tiene salida a internet ni puertos publicados
+  frontend: {}
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

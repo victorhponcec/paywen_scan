@@ -1,0 +1,51 @@
+# Entorno local para desarrollar sin AWS: PostgreSQL + API + worker.
+#
+#   docker compose -f compose.dev.yaml up --build
+#   → dashboard en http://localhost:8000 (usuario admin / contraseña admin)
+#   → worker:  docker compose -f compose.dev.yaml run --rm worker
+#
+# Los secretos de AWS se reemplazan por variables de entorno.
+
+name: paywen-dev
+
+x-app-env: &app-env
+  DATABASE_URL: postgresql://paywen:paywen@db:5432/paywen
+  AGENT_TOKEN: dev-token-cambiar
+  DASHBOARD_USER: admin
+  DASHBOARD_PASSWORD: admin
+  OTX_API_KEY: ${OTX_API_KEY:-}
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: paywen
+      POSTGRES_USER: paywen
+      POSTGRES_PASSWORD: paywen
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U paywen -d paywen"]
+      interval: 3s
+      retries: 20
+
+  api:
+    build: .
+    environment: *app-env
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  worker:
+    build: .
+    command: ["python", "-m", "worker"]
+    environment: *app-env
+    profiles: ["worker"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

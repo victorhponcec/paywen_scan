@@ -1,0 +1,189 @@
+{% macro pill(rank) -%}
+<span class="pill pill-{{ LEVEL_SLUG[rank] }}">{{ LEVELS[rank] }}</span>
+{%- endmacro %}
+
+{% macro host_list(hosts) -%}
+{%- for h in (hosts or "").split(", ") -%}<span class="nowrap">{{ h }}</span>{% if not loop.last %}, {% endif %}{%- endfor -%}
+{%- endmacro %}
+
+{% macro count_pill(n, rank) -%}
+{%- if n -%}<span class="pill pill-{{ LEVEL_SLUG[rank] }}">{{ n|n }} {{ LEVELS[rank] }}</span>
+{%- else -%}<span class="muted">0 {{ LEVELS[rank]|lower }}</span>{%- endif -%}
+{%- endmacro %}
+
+{% macro status_badge(st, compact=False) -%}
+<span class="status status-{{ st.key }}" title="{{ st.hint }}">
+  {{- icon('wifi-off' if st.key == 'offline' else 'wifi', 14) -}}
+  {%- if not compact %}<span>{{ st.label }}</span>{% endif -%}
+</span>
+{%- endmacro %}
+
+{% macro vuln_link(key) -%}
+{%- if key.startswith('CVE-') -%}
+<a class="ext" href="https://nvd.nist.gov/vuln/detail/{{ key }}" rel="noopener noreferrer" target="_blank">{{ key }}{{ icon('external-link', 12) }}</a>
+{%- else -%}
+<a class="ext" href="https://osv.dev/vulnerability/{{ key }}" rel="noopener noreferrer" target="_blank">{{ key }}{{ icon('external-link', 12) }}</a>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro findings_table(rows, show_hosts=True) %}
+{% if rows %}
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr>
+      <th scope="col">Prioridad</th>
+      <th scope="col">Vulnerabilidad</th>
+      <th scope="col">Paquete</th>
+      {% if show_hosts %}<th scope="col">Hosts</th>{% endif %}
+      <th scope="col" class="num">CVSS</th>
+      <th scope="col" class="num">EPSS</th>
+      <th scope="col">KEV</th>
+      <th scope="col">Expuesto</th>
+      <th scope="col">Versión que corrige</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td>{{ pill(r.rank) }}</td>
+      <td class="mono">
+        {{ vuln_link(r.vuln_key) }}
+        {% if r.summary %}<div class="sub clamp">{{ r.summary }}</div>{% endif %}
+      </td>
+      <td class="mono">{{ r.package }}<div class="sub">{{ r.ecosystem }} · {{ r.versions }}</div></td>
+      {% if show_hosts %}<td>{{ host_list(r.hosts) }}</td>{% endif %}
+      <td class="num mono">{{ r.cvss|score }}</td>
+      <td class="num mono">
+        {% if r.epss is not none and r.epss >= 0.1 %}<span class="hot" title="EPSS ≥ 10 %: probable explotación en 30 días">{{ icon('flame', 13) }}</span>{% endif %}{{ r.epss|pct }}
+        {% if r.percentile is not none %}<div class="sub">p{{ (r.percentile * 100)|round|int }}</div>{% endif %}
+      </td>
+      <td>
+        {% if r.in_kev %}
+          <span class="tag tag-kev">{{ icon('shield-exclamation-point', 13) }}Sí</span>{% if r.ransomware %} <span class="tag tag-ransom">{{ icon('skull', 13) }}Ransomware</span>{% endif %}
+        {% else %}<span class="muted">No</span>{% endif %}
+        {% if r.pulses %}<div class="sub">{{ r.pulses }} pulse{{ "s" if r.pulses != 1 else "" }} OTX</div>{% endif %}
+      </td>
+      <td>{% if r.exposed %}<span class="tag tag-exposed">{{ icon('ethernet-port', 13) }}{{ r.ports|join(", ") if r.ports else "Sí" }}</span>{% else %}<span class="muted">No</span>{% endif %}</td>
+      <td class="mono">{{ r.fixed_version or "sin parche" }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="empty">No hay hallazgos con estos filtros.</p>
+{% endif %}
+{% endmacro %}
+
+{% macro filter_form(f, action, options) %}
+<form class="filters" method="get" action="{{ action }}">
+  <div class="filters-row">
+    <label>Prioridad
+      <select name="priority">
+        <option value="">Todas</option>
+        {% for slug in LEVEL_SLUG|reverse %}
+        <option value="{{ slug }}" {% if f.priority == slug %}selected{% endif %}>{{ LEVELS[LEVEL_SLUG.index(slug)] }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="check"><input type="checkbox" name="kev" value="1" {% if f.kev %}checked{% endif %}> Solo KEV</label>
+    <label class="check"><input type="checkbox" name="ransomware" value="1" {% if f.ransomware %}checked{% endif %}> Con ransomware</label>
+    <label class="check"><input type="checkbox" name="exposed" value="1" {% if f.exposed %}checked{% endif %}> Con puerto expuesto</label>
+    <label class="check"><input type="checkbox" name="fixable" value="1" {% if f.fixable %}checked{% endif %}> Con parche</label>
+    <label class="grow">Buscar <input type="search" name="q" value="{{ f.q or '' }}" placeholder="CVE o paquete"></label>
+    <button type="submit">{{ icon('funnel', 16) }}Filtrar</button>
+    <a class="button-link" href="{{ action }}">Limpiar</a>
+  </div>
+  <details class="more" {% if f.advanced %}open{% endif %}>
+    <summary>Más filtros</summary>
+    <div class="filters-row">
+      {% if not f.fixed_host %}
+      <label><span class="lbl">{{ icon('server', 14) }} Servidor</span>
+        <select name="host">
+          <option value="">Todos</option>
+          {% for h in options.hosts %}<option value="{{ h.id }}" {% if f.host_id == h.id %}selected{% endif %}>{{ h.hostname }}</option>{% endfor %}
+        </select>
+      </label>
+      {% endif %}
+      <label><span class="lbl">{{ icon('monitor', 14) }} Sistema operativo</span>
+        <select name="os">
+          <option value="">Todos</option>
+          {% for o in options.os %}<option value="{{ o }}" {% if f.os_name == o %}selected{% endif %}>{{ o }}</option>{% endfor %}
+        </select>
+      </label>
+      <label><span class="lbl">{{ icon('ethernet-port', 14) }} Puerto expuesto</span>
+        <select name="port">
+          <option value="">Cualquiera</option>
+          {% for p in options.ports %}<option value="{{ p }}" {% if f.port == p %}selected{% endif %}>{{ p }}</option>{% endfor %}
+        </select>
+      </label>
+      <label><span class="lbl">{{ icon('package', 14) }} Ecosistema</span>
+        <select name="eco">
+          <option value="">Todos</option>
+          {% for e in options.ecosystems %}<option value="{{ e }}" {% if f.ecosystem == e %}selected{% endif %}>{{ e }}</option>{% endfor %}
+        </select>
+      </label>
+      <label><span class="lbl">{{ icon('flame', 14) }} EPSS</span>
+        <select name="epss_min">
+          <option value="">Cualquiera</option>
+          {% for k, v in EPSS_CHOICES.items() %}<option value="{{ k }}" {% if f.epss_min == k %}selected{% endif %}>{{ v }}</option>{% endfor %}
+        </select>
+      </label>
+      <label><span class="lbl">{{ icon('gauge', 14) }} CVSS</span>
+        <select name="cvss_min">
+          <option value="">Cualquiera</option>
+          {% for k, v in CVSS_CHOICES.items() %}<option value="{{ k }}" {% if f.cvss_min == k %}selected{% endif %}>{{ v }}</option>{% endfor %}
+        </select>
+      </label>
+      <label><span class="lbl">{{ icon('clock', 14) }} Nuevas</span>
+        <select name="new">
+          <option value="">Todas</option>
+          {% for k, v in NEW_CHOICES.items() %}<option value="{{ k }}" {% if f.new_days == k %}selected{% endif %}>{{ v }}</option>{% endfor %}
+        </select>
+      </label>
+    </div>
+  </details>
+</form>
+{% endmacro %}
+
+{# Tarjeta de tendencia: valor actual, variación de 7 días y mini gráfico. #}
+{% macro trend_card(name, slug, values, labels, href) %}
+{% set tr = trend(values) %}
+{% set known = values|reject('none')|list %}
+<a class="trend-card" href="{{ href }}">
+  <span class="trend-head"><span class="swatch s-{{ slug }}"></span>{{ name }}</span>
+  <span class="trend-value">{{ (known[-1] if known else 0)|n }}</span>
+  {% if tr %}
+  <span class="delta {{ 'delta-bad' if tr.delta > 0 else 'delta-good' if tr.delta < 0 else 'delta-flat' }}">
+    {{ icon('trending-up' if tr.delta > 0 else 'trending-down', 14) if tr.delta else '' }}{{ tr.delta|delta }} <span class="muted">en 7 días</span>
+  </span>
+  {% else %}
+  <span class="delta delta-flat muted">sin datos previos</span>
+  {% endif %}
+  {{ charts.spark(values, labels, 's-' ~ slug, name) }}
+</a>
+{% endmacro %}
+
+{% macro donut_panel(dist, title="Distribución por prioridad") %}
+{% set segs = [("Crítica", "s-critica", dist[3]), ("Alta", "s-alta", dist[2]), ("Media", "s-media", dist[1]), ("Baja", "s-baja", dist[0])] %}
+{% set total = dist|sum %}
+<div class="donut-wrap">
+  {{ charts.donut(segs) }}
+  <ul class="legend">
+    {% for name, cls, v in segs %}
+    <li><span class="swatch {{ cls }}"></span><span class="legend-name">{{ name }}</span>
+      <span class="legend-value">{{ v|n }}</span><span class="legend-pct">{{ ((100 * v / total)|round(1) if total else 0)|string|replace('.', ',') }} %</span></li>
+    {% endfor %}
+  </ul>
+</div>
+{% endmacro %}
+
+{% macro packages_chart(packages, base="/findings") %}
+{% if packages %}
+{{ charts.hbars(package_rows(packages, base)) }}
+<div class="legend-inline"><span><span class="swatch s-critica"></span>Crítica</span><span><span class="swatch s-alta"></span>Alta</span></div>
+{% else %}
+<p class="empty">Sin hallazgos críticos ni altos.</p>
+{% endif %}
+{% endmacro %}

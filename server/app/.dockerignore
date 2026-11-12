@@ -1,0 +1,13 @@
+**/__pycache__
+**/*.pyc
+.git
+.venv
+venv
+tests
+agent
+agent-windows
+docs
+*.md
+compose.dev.yaml
+.env*
+!paywen/manual/*.md

@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% from "_macros.html" import findings_table, filter_form %}
+{% block title %}Hallazgos · Paywen Scan{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Hallazgos</h1>
+    <p class="muted">{{ rows|length|n }} resultado{{ "s" if rows|length != 1 else "" }}{% if rows|length >= 300 %} (se muestran los 300 de mayor prioridad; el CSV trae hasta 5.000){% endif %}</p>
+  </div>
+  <a class="button-link" href="/findings.csv{% if f.query_string() %}?{{ f.query_string() }}{% endif %}">{{ icon('download', 16) }}Exportar CSV</a>
+</div>
+<section class="panel">
+  {{ filter_form(f, "/findings", options) }}
+  {{ findings_table(rows) }}
+</section>
+{% endblock %}

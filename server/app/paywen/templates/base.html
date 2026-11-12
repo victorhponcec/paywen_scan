@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Paywen Scan{% endblock %}</title>
+  <link rel="icon" href="{{ url_for('static', path='favicon.svg') }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}?v={{ version }}">
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <a class="brand" href="/">
+      <span class="brand-mark">{{ icon('shield-check', 22) }}</span>
+      <span>Paywen Scan</span>
+    </a>
+    {% if nav %}
+    <nav aria-label="Secciones">
+      {% for key, href, label, ic in [
+          ('resumen', '/', 'Resumen', 'layout-dashboard'),
+          ('servidores', '/hosts', 'Servidores', 'server'),
+          ('hallazgos', '/findings', 'Hallazgos', 'bug'),
+          ('historico', '/history', 'Histórico', 'rotate-ccw-clock'),
+          ('campanas', '/campaigns', 'Campañas', 'radar'),
+          ('docs', '/docs', 'Docs', 'book-open')] %}
+      <a href="{{ href }}" {% if nav == key %}aria-current="page"{% endif %}>{{ icon(ic, 17) }}<span>{{ label }}</span></a>
+      {% endfor %}
+      <a class="nav-logout" href="/logout" title="Cerrar sesión">{{ icon('log-out', 17) }}<span class="sr-only">Cerrar sesión</span></a>
+    </nav>
+    {% endif %}
+  </div>
+</header>
+<main class="wrap">
+{% block content %}{% endblock %}
+</main>
+<footer class="wrap footer">
+  <span>Paywen Scan <a href="/docs/changelog">{{ icon('tag', 13) }} v{{ version }}</a></span>
+  <span>Fuentes: OSV.dev · CISA KEV · FIRST EPSS · AlienVault OTX · Íconos: Lucide</span>
+</footer>
+</body>
+</html>
